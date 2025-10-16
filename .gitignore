@@ -119,6 +119,8 @@ ENV/
 
 # data
 *.parquet
+*test_example.json
+*train_example.json
 
 
 # local logs
