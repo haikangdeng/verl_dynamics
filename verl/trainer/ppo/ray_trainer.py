@@ -415,7 +415,61 @@ class RayPPOTrainer:
         except Exception as e:
             print(f"Warning: Could not set total_training_steps in config. Structure missing? Error: {e}")
 
-    def _dump_generations(self, inputs, outputs, gts, scores, reward_extra_infos_dict, dump_path):
+    # def _dump_generations(self, inputs, outputs, gts, scores, reward_extra_infos_dict, dump_path):
+    #     """Dump rollout/validation samples as JSONL."""
+    #     os.makedirs(dump_path, exist_ok=True)
+    #     filename = os.path.join(dump_path, f"{self.global_steps}.jsonl")
+
+    #     n = len(inputs)
+    #     base_data = {
+    #         "input": inputs,
+    #         "output": outputs,
+    #         "gts": gts,
+    #         "score": scores,
+    #         "step": [self.global_steps] * n,
+    #     }
+
+    #     for k, v in reward_extra_infos_dict.items():
+    #         if len(v) == n:
+    #             base_data[k] = v
+
+    #     lines = []
+    #     for i in range(n):
+    #         entry = {k: v[i] for k, v in base_data.items()}
+    #         lines.append(json.dumps(entry, ensure_ascii=False))
+
+    #     with open(filename, "w") as f:
+    #         f.write("\n".join(lines) + "\n")
+
+    #     print(f"Dumped generations to {filename}")
+        
+        
+    def _sort_by_uid(self, base_data):
+        """Sort all lists in base_data dictionary by the 'uid' field.
+        
+        Args:
+            base_data (dict): Dictionary where each value is a list of the same length.
+                              Must contain a 'uid' key with UIDs to sort by.
+        
+        Returns:
+            dict: Dictionary with all lists sorted by UID order.
+        """
+        if 'uid' not in base_data:
+            return base_data
+        
+        # Get the UIDs and create sorted indices
+        uids = base_data['uid']
+        sorted_indices = sorted(range(len(uids)), key=lambda i: uids[i])
+        
+        # Reorder all lists in the dictionary based on sorted indices
+        sorted_data = {}
+        for key, value_list in base_data.items():
+            sorted_data[key] = [value_list[i] for i in sorted_indices]
+        
+        return sorted_data
+
+
+    def _dump_generations(self, inputs, outputs, gts, scores, reward_extra_infos_dict, dump_path, sort_uid = None):
         """Dump rollout/validation samples as JSONL."""
         os.makedirs(dump_path, exist_ok=True)
         filename = os.path.join(dump_path, f"{self.global_steps}.jsonl")
@@ -427,12 +481,25 @@ class RayPPOTrainer:
             "gts": gts,
             "score": scores,
             "step": [self.global_steps] * n,
-        }
-
+        }         
         for k, v in reward_extra_infos_dict.items():
             if len(v) == n:
-                base_data[k] = v
+                try:
+                    if v is not None and isinstance(v, np.ndarray):
+                        v = v.tolist()  # convert to list for json serialization
+                    if v is not None and isinstance(v, torch.Tensor):
+                        v = v.tolist()  # convert to list for json serialization
+                    json.dumps(v)  # check if it is json serializable
+                    base_data[k] = v
+                except Exception as e:
+                    print(f"Warning: {k} in reward_extra_infos_dict is not json serializable. Error: {e}")
+                
 
+        # Sort the data based on uid
+        if sort_uid is not None:
+            base_data['uid'] = sort_uid
+            base_data = self._sort_by_uid(base_data)
+        
         lines = []
         for i in range(n):
             entry = {k: v[i] for k, v in base_data.items()}
@@ -442,6 +509,7 @@ class RayPPOTrainer:
             f.write("\n".join(lines) + "\n")
 
         print(f"Dumped generations to {filename}")
+
 
     def _log_rollout_data(
         self, batch: DataProto, reward_extra_infos_dict: dict, timing_raw: dict, rollout_data_dir: str
@@ -453,27 +521,78 @@ class RayPPOTrainer:
             timing_raw (dict): Timing information for profiling
             rollout_data_dir (str): Directory path to save the rollout data
         """
+        # with marked_timer("dump_rollout_generations", timing_raw, color="green"):
+        #     inputs = self.tokenizer.batch_decode(batch.batch["prompts"], skip_special_tokens=True)
+        #     outputs = self.tokenizer.batch_decode(batch.batch["responses"], skip_special_tokens=True)
+        #     scores = batch.batch["token_level_scores"].sum(-1).cpu().tolist()
+        #     sample_gts = [item.non_tensor_batch.get("reward_model", {}).get("ground_truth", None) for item in batch]
+
+        #     reward_extra_infos_to_dump = reward_extra_infos_dict.copy()
+        #     if "request_id" in batch.non_tensor_batch:
+        #         reward_extra_infos_dict.setdefault(
+        #             "request_id",
+        #             batch.non_tensor_batch["request_id"].tolist(),
+        #         )
+
+        #     self._dump_generations(
+        #         inputs=inputs,
+        #         outputs=outputs,
+        #         gts=sample_gts,
+        #         scores=scores,
+        #         reward_extra_infos_dict=reward_extra_infos_to_dump,
+        #         dump_path=rollout_data_dir,
+        #     )
         with marked_timer("dump_rollout_generations", timing_raw, color="green"):
+            # inputs = [i_token.replace("<|endoftext|>", "") for i_token in self.tokenizer.batch_decode(batch.batch["prompts"], skip_special_tokens=False)]
+            # outputs = []
+            # for o in self.tokenizer.batch_decode(batch.batch["responses"], skip_special_tokens=False):
+            #     # Remove the end of text token if it exists
+            #     if "<|endoftext|>" in o:
+            #         outputs.append(o.split("<|endoftext|>")[0] + "<|endoftext|>")
+            #     else:
+            #         outputs.append(o)
+            # scores = batch.batch["token_level_scores"].sum(-1).cpu().tolist()
+            # sample_gts = [
+            #     item.non_tensor_batch.get("reward_model", {}).get("ground_truth", None)
+            #     for item in batch
+            # ]
             inputs = self.tokenizer.batch_decode(batch.batch["prompts"], skip_special_tokens=True)
             outputs = self.tokenizer.batch_decode(batch.batch["responses"], skip_special_tokens=True)
             scores = batch.batch["token_level_scores"].sum(-1).cpu().tolist()
             sample_gts = [item.non_tensor_batch.get("reward_model", {}).get("ground_truth", None) for item in batch]
 
-            reward_extra_infos_to_dump = reward_extra_infos_dict.copy()
-            if "request_id" in batch.non_tensor_batch:
-                reward_extra_infos_dict.setdefault(
-                    "request_id",
-                    batch.non_tensor_batch["request_id"].tolist(),
-                )
+            # The reward_extra_infos_dict can be different from the batch due to the dynamic sampling. Use the value in the batch instead.
+            new_reward_extra_infos_dict = {}
+            if reward_extra_infos_dict:
+                for k in reward_extra_infos_dict.keys():
+                    get_value = batch.non_tensor_batch.get(k, None)
+                    new_reward_extra_infos_dict[k] = get_value
+                                        
+            advantages = batch.batch["advantages"][:, 0].cpu().tolist()
+            # sequence_entropy = batch.batch["sequence_entropy"].cpu().tolist()
+            # use_rm = batch.non_tensor_batch["use_rm"].tolist()
+            # id_list = batch.non_tensor_batch["id"].tolist()
+
+            new_reward_extra_infos_dict["advantages"] = advantages
+            # new_reward_extra_infos_dict["sequence_entropy"] = sequence_entropy
+            # new_reward_extra_infos_dict["use_rm"] = use_rm
+            # new_reward_extra_infos_dict["id"] = id_list
+
+            # Send the uid to dump function
+            uid_list = [uid for uid in batch.non_tensor_batch["uid"]]
+            # uid_list = [f"{uid}-{use_rm[d_idx]}" for d_idx, uid in enumerate(uid_list)]
 
             self._dump_generations(
                 inputs=inputs,
                 outputs=outputs,
                 gts=sample_gts,
                 scores=scores,
-                reward_extra_infos_dict=reward_extra_infos_to_dump,
+                reward_extra_infos_dict=new_reward_extra_infos_dict,
                 dump_path=rollout_data_dir,
+                sort_uid = uid_list
             )
+            
+            
 
     def _maybe_log_val_generations(self, inputs, outputs, scores):
         """Log a table of validation samples to the configured logger (wandb or swanlab)"""
@@ -765,7 +884,7 @@ class RayPPOTrainer:
                 config=self.config, worker_group=self.actor_rollout_wg, rm_wg=self.rm_wg
             )
 
-    def _save_checkpoint(self):
+    def _save_checkpoint(self, save_optimizer=True):
         from verl.utils.fs import local_mkdir_safe
 
         # path: given_path + `/global_step_{global_steps}` + `/actor`
@@ -796,7 +915,7 @@ class RayPPOTrainer:
         )
 
         self.actor_rollout_wg.save_checkpoint(
-            actor_local_path, actor_remote_path, self.global_steps, max_ckpt_to_keep=max_actor_ckpt_to_keep
+            actor_local_path, actor_remote_path, self.global_steps, max_ckpt_to_keep=max_actor_ckpt_to_keep, save_optimizer=save_optimizer
         )
 
         if self.use_critic:
@@ -1225,6 +1344,10 @@ class RayPPOTrainer:
                         print("Force saving checkpoint: ESI instance expiration approaching.")
                     with marked_timer("save_checkpoint", timing_raw, color="green"):
                         self._save_checkpoint()
+                        
+                elif self.config.trainer.save_freq > 0 and self.config.trainer.save_extra:
+                    with marked_timer("save_checkpoint", timing_raw, color="green"):
+                        self._save_checkpoint(save_optimizer=False)
 
                 with marked_timer("stop_profile", timing_raw):
                     next_step_profile = (

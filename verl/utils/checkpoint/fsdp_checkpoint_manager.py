@@ -177,7 +177,7 @@ class FSDPCheckpointManager(BaseCheckpointManager):
         # wait for everyone to load checkpoints
         torch.distributed.barrier()
 
-    def save_checkpoint(self, local_path: str, hdfs_path: str = None, global_step: int = 0, max_ckpt_to_keep=None):
+    def save_checkpoint(self, local_path: str, hdfs_path: str = None, global_step: int = 0, max_ckpt_to_keep=None, save_optimizer=True):
         """
         Save an FSDP checkpoint for this rank.
 
@@ -239,7 +239,7 @@ class FSDPCheckpointManager(BaseCheckpointManager):
                     torch.save(model_state_dict, model_path)
                     log_with_rank(f"Saved model to {os.path.abspath(model_path)}", rank=self.rank, logger=logger)
 
-                if self.should_save_optimizer:
+                if self.should_save_optimizer and save_optimizer:
                     optimizer_state_dict = self.optimizer.state_dict()
                     torch.save(optimizer_state_dict, optim_path)
                     log_with_rank(f"Saved optim to {os.path.abspath(optim_path)}", rank=self.rank, logger=logger)

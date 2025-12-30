@@ -128,3 +128,12 @@ logs
 log
 outputs
 .history
+
+# generations
+rollout_data
+validation_data
+
+data
+notebook.ipynb
+
+recipe/dapo/*.sh

@@ -148,15 +148,22 @@ class RLHFDataset(Dataset):
             prompt_key = self.prompt_key
             image_key = self.image_key
             video_key = self.video_key
+            
+            print(f"🟥 maybe_filter_out_long_prompts called 🟥")
+            # print(f"🟥 processor: {processor} 🟥")
+            # exit()
 
             if processor is not None:
                 from verl.utils.dataset.vision_utils import process_image, process_video
 
                 def doc2len(doc) -> int:
                     messages = self._build_messages(doc)
-                    raw_prompt = self.processor.apply_chat_template(
-                        messages, add_generation_prompt=True, tokenize=False, **self.apply_chat_template_kwargs
-                    )
+                    if isinstance(messages, str):
+                        raw_prompt = messages
+                    else:
+                        raw_prompt = self.processor.apply_chat_template(
+                            messages, add_generation_prompt=True, tokenize=False, **self.apply_chat_template_kwargs
+                        )
                     images = (
                         [process_image(image) for image in doc[image_key]]
                         if image_key in doc and doc[image_key]
@@ -173,11 +180,13 @@ class RLHFDataset(Dataset):
             else:
 
                 def doc2len(doc) -> int:
-                    return len(
-                        tokenizer.apply_chat_template(
+                    if isinstance(doc[prompt_key], str):
+                        raw_prompt = doc[prompt_key]
+                    else:
+                        raw_prompt = tokenizer.apply_chat_template(
                             doc[prompt_key], add_generation_prompt=True, **self.apply_chat_template_kwargs
                         )
-                    )
+                    return len(raw_prompt)
 
             dataframe = dataframe.filter(
                 lambda doc: doc2len(doc) <= self.max_prompt_length,
@@ -228,13 +237,20 @@ class RLHFDataset(Dataset):
         row_dict: dict = self.dataframe[item]
         messages = self._build_messages(row_dict)
         model_inputs = {}
+        
+        # print(f"🟥 processor: {self.processor} 🟥")     # None for lean dataset
+        # print(f"🟥 messages: {messages} 🟥")      # still string if no image or video key
+        # exit()
 
         if self.processor is not None:
             from verl.utils.dataset.vision_utils import process_image, process_video
 
-            raw_prompt = self.processor.apply_chat_template(
-                messages, add_generation_prompt=True, tokenize=False, **self.apply_chat_template_kwargs
-            )
+            if isinstance(messages, str):
+                raw_prompt = messages
+            else:
+                raw_prompt = self.processor.apply_chat_template(
+                    messages, add_generation_prompt=True, tokenize=False, **self.apply_chat_template_kwargs
+                )
             multi_modal_data = {}
 
             images = None
@@ -280,9 +296,13 @@ class RLHFDataset(Dataset):
                     "chat_template should be provided in apply_chat_template_kwargs or tokenizer config, "
                     "models like GLM can copy chat_template.jinja from instruct models"
                 )
-            raw_prompt = self.tokenizer.apply_chat_template(
-                messages, add_generation_prompt=True, tokenize=False, **self.apply_chat_template_kwargs
-            )
+            
+            if isinstance(messages, str):
+                raw_prompt = messages
+            else:
+                raw_prompt = self.tokenizer.apply_chat_template(
+                    messages, add_generation_prompt=True, tokenize=False, **self.apply_chat_template_kwargs
+                )
             model_inputs = self.tokenizer(raw_prompt, return_tensors="pt", add_special_tokens=False)
             input_ids = model_inputs.pop("input_ids")
             attention_mask = model_inputs.pop("attention_mask")

@@ -430,12 +430,16 @@ def process_validation_metrics(
         var2vals = data_src2uid2var2vals[data_source][uid]
         for var_name, var_vals in infos_dict.items():
             var2vals[var_name].append(var_vals[sample_idx])
+    
+    print(f"🟥 sample_uids: {sample_uids} 🟥")
 
     # Calculate metrics for each group
     data_src2uid2var2metric = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
     for data_source, uid2var2vals in data_src2uid2var2vals.items():
+        print(f"🟥 data_source: {data_source}, uid2var2vals: {uid2var2vals} 🟥")
         for uid, var2vals in uid2var2vals.items():
             for var_name, var_vals in var2vals.items():
+                # print(f"🟥 var_name: {var_name}, var_vals: {var_vals} 🟥")
                 if isinstance(var_vals[0], str):
                     continue
 

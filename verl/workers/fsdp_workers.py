@@ -1020,7 +1020,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         return output
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
-    def save_checkpoint(self, local_path, hdfs_path=None, global_step=0, max_ckpt_to_keep=None):
+    def save_checkpoint(self, local_path, hdfs_path=None, global_step=0, max_ckpt_to_keep=None, save_optimizer=True):
         from verl.utils.logger import log_with_rank
 
         # only support save and load ckpt for actor
@@ -1030,7 +1030,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             load_fsdp_model_to_gpu(self.actor_module_fsdp)
 
         self.checkpoint_manager.save_checkpoint(
-            local_path=local_path, hdfs_path=hdfs_path, global_step=global_step, max_ckpt_to_keep=max_ckpt_to_keep
+            local_path=local_path, hdfs_path=hdfs_path, global_step=global_step, max_ckpt_to_keep=max_ckpt_to_keep, save_optimizer=save_optimizer
         )
         dist.barrier()
 

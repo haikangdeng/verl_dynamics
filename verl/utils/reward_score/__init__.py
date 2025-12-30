@@ -61,17 +61,25 @@ def default_compute_score(
     #     res = math_dapo.compute_score(solution_str, ground_truth)
     
     # use a unified reward function for math datasets, format answer using \\boxed{}
-    if data_source.startswith("format_only_"):
+    if data_source.startswith("lean"):
+        # from . import lean_local as lean_scorer
+        from . import lean_repl as lean_scorer
+        # from . import lean_server as lean_scorer
+        res = lean_scorer.compute_score(solution_str, ground_truth, extra_info)
+    
+    elif data_source.startswith("format_only_"):
         from . import format_only
-        res = format_only.compute_score(solution_str, ground_truth)
+        res = format_only.compute_score(solution_str, ground_truth, strict_box_verify=True, pause_tokens_index=None)
     
     elif data_source in [
-        "openai/gsm8k",
+        "openai/gsm8k", "dapo_boxed", "dapo_aime_boxed",
         "lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval", "HuggingFaceH4/MATH-500"
         "math_dapo", "math", "math_dapo_reasoning"
     ] or data_source.startswith("aime"):
+        # print("✅ using math_dapo reward function ✅")
         from . import math_dapo
-        res = math_dapo.compute_score(solution_str, ground_truth)
+        res = math_dapo.compute_score(solution_str, ground_truth, strict_box_verify=True, pause_tokens_index=None)
+        # res = math_dapo.compute_score(solution_str, ground_truth)
         
     elif data_source in [
         "numina_aops_forum",

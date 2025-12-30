@@ -358,6 +358,10 @@ class RayDAPOTrainer(RayPPOTrainer):
                 ):
                     with marked_timer("save_checkpoint", timing_raw, "green"):
                         self._save_checkpoint()
+                        
+                elif self.config.trainer.save_freq > 0 and self.config.trainer.save_extra:
+                    with marked_timer("save_checkpoint", timing_raw, "green"):
+                        self._save_checkpoint(save_optimizer=False)
 
                 with marked_timer("stop_profile", timing_raw):
                     next_step_profile = (
